@@ -1,0 +1,15 @@
+import FreeCAD as App
+
+# Access the Spaceball motion parameters
+param = App.ParamGet('User parameter:BaseApp/Spaceball/Motion')
+
+# Toggle the 'Rotations' boolean parameter
+rotation_state = param.GetBool('Rotations')
+new_state = not rotation_state
+param.SetBool('Rotations', new_state)
+
+# Display status in the report view
+if new_state:
+    print("Spacemouse Rotation Enabled")
+else:
+    print("Spacemouse Rotation Disabled")

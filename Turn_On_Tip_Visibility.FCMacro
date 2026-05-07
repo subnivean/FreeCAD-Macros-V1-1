@@ -1,0 +1,10 @@
+for obj in App.ActiveDocument.Objects:
+    if 'Endmill' in obj.Label:
+        #break
+        continue
+    if obj.TypeId == "PartDesign::Body":
+        try:
+            obj.Tip.Visibility = True
+            print(f"Turning on Tip visibility for {obj.Label}")
+        except:
+            pass

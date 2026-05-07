@@ -1,0 +1,8 @@
+import FreeCADGui
+from PySide import QtWidgets
+
+mw = FreeCADGui.getMainWindow()
+
+for widget in mw.findChildren(QtWidgets.QTreeWidget):
+    widget.setFocus()
+    break

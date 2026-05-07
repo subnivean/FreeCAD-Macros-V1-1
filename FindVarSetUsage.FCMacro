@@ -1,0 +1,147 @@
+"""
+    A FreeCAD macro to list expressions which use varset properties
+"""
+
+import FreeCAD as app
+from PySide import QtCore, QtGui, QtWidgets
+import re
+
+##############################################################################
+
+"""
+    Display an error message dialog
+"""
+
+def errorDialog(msg):
+    diag = QtGui.QMessageBox(
+            QtGui.QMessageBox.Information,
+            os.path.basename(__file__),
+            msg,
+    )
+    diag.setWindowModality(QtCore.Qt.ApplicationModal)
+    diag.exec_()
+
+##############################################################################
+
+# React to varset combobox selection change
+
+def varsetChanged(comboBox):
+    global doc
+    label = ui.comboBox_Varset.itemText(comboBox)
+    ui.comboBox_Property.clear()
+    objects = doc.getObjectsByLabel(label)
+    varset = None
+    excluded_properties = {"ExpressionEngine", "Label", "Label2", "Visibility"}
+
+    # We need to find the varset which has this label
+    for obj in objects:
+        if obj.Label == label and obj.Name.startswith('VarSet'):
+            varset = obj
+            break
+
+    if varset is not None:
+        ui.textEdit_Expressions.clear()
+        for prop in varset.PropertiesList:
+            if prop not in excluded_properties:
+                ui.comboBox_Property.addItem(prop)
+
+##############################################################################
+
+# React to property combobox selection change
+
+def propertyChanged(comboBox):
+    prop = ui.comboBox_Property.itemText(comboBox)
+    results = ''
+
+    for path, exp in foundExpressions:
+        if re.search(r'\b' + prop + r'\b', exp):
+            results += path + " = " + exp + "\n"
+
+    ui.textEdit_Expressions.setText(results)
+
+##############################################################################
+
+# The dialog
+
+class Ui_Dialog(object):
+    def setupUi(self, Dialog):
+        Dialog.setObjectName("Dialog")
+        Dialog.resize(872, 793)
+        self.gridLayoutWidget = QtWidgets.QWidget(parent=Dialog)
+        self.gridLayoutWidget.setGeometry(QtCore.QRect(19, 9, 841, 31))
+        self.gridLayoutWidget.setObjectName("gridLayoutWidget")
+        self.gridLayout = QtWidgets.QGridLayout(self.gridLayoutWidget)
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout.setHorizontalSpacing(5)
+        self.gridLayout.setVerticalSpacing(1)
+        self.gridLayout.setObjectName("gridLayout")
+        self.comboBox_Property = QtWidgets.QComboBox(parent=self.gridLayoutWidget)
+        self.comboBox_Property.setObjectName("comboBox_Property")
+        self.gridLayout.addWidget(self.comboBox_Property, 0, 3, 1, 1)
+        self.label_2 = QtWidgets.QLabel(parent=self.gridLayoutWidget)
+        self.label_2.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight|QtCore.Qt.AlignmentFlag.AlignTrailing|QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.label_2.setObjectName("label_2")
+        self.gridLayout.addWidget(self.label_2, 0, 2, 1, 1)
+        self.label = QtWidgets.QLabel(parent=self.gridLayoutWidget)
+        self.label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight|QtCore.Qt.AlignmentFlag.AlignTrailing|QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.label.setIndent(-1)
+        self.label.setObjectName("label")
+        self.gridLayout.addWidget(self.label, 0, 0, 1, 1)
+        self.comboBox_Varset = QtWidgets.QComboBox(parent=self.gridLayoutWidget)
+        self.comboBox_Varset.setObjectName("comboBox_Varset")
+        self.gridLayout.addWidget(self.comboBox_Varset, 0, 1, 1, 1)
+        self.label_3 = QtWidgets.QLabel(parent=self.gridLayoutWidget)
+        self.label_3.setText("")
+        self.label_3.setObjectName("label_3")
+        self.gridLayout.addWidget(self.label_3, 0, 4, 1, 1)
+        self.textEdit_Expressions = QtWidgets.QTextEdit(parent=Dialog)
+        self.textEdit_Expressions.setGeometry(QtCore.QRect(23, 49, 831, 731))
+        self.textEdit_Expressions.setObjectName("textEdit_Expressions")
+        self.textEdit_Expressions.setReadOnly(True)
+
+        self.retranslateUi(Dialog)
+        QtCore.QMetaObject.connectSlotsByName(Dialog)
+
+        self.comboBox_Varset.currentIndexChanged.connect(varsetChanged)
+        self.comboBox_Property.currentIndexChanged.connect(propertyChanged)
+
+    def retranslateUi(self, Dialog):
+        _translate = QtCore.QCoreApplication.translate
+        Dialog.setWindowTitle(_translate("Dialog", "Results Output"))
+        self.label.setText(_translate("Dialog", "VarSet"))
+        self.label_2.setText(_translate("Dialog", "Property"))
+
+##############################################################################
+
+outputDialog = QtWidgets.QDialog()
+reportMsg = ''
+singleUseMsg = ''
+doc = FreeCAD.ActiveDocument
+varsets = []
+
+if doc is None:
+    errorDialog("No active document found")
+else:
+    ui = Ui_Dialog()
+    ui.setupUi(outputDialog)
+    ui.comboBox_Varset.clear()
+
+    # Build a list of all expressions in the project
+    # including where they are found
+    foundExpressions = []
+    for obj in doc.Objects:
+        expression_engine = getattr(obj, "ExpressionEngine", None)
+        if expression_engine:
+            for expression in expression_engine:
+                foundExpressions.append([obj.Label + '.' + expression[0], expression[1]])
+
+    # Find all varsets in the project
+    for obj in doc.Objects:
+        if obj.Name.startswith("VarSet"):
+            varsets.append(obj)
+            ui.comboBox_Varset.addItem(obj.Label)
+
+    if not len(varsets):
+        errorDialog("No VarSets found in the active document")
+    else:
+        outputDialog.exec_()
