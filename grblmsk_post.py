@@ -525,6 +525,12 @@ def parse(pathobj):
             # store the latest command
             lastcommand = command
 
+            # Save current position for G02/G03 full-circle detection and fix (more below)
+            # Added by MSK on 2026-05-26 per ChatGPT suggestion.
+            prev_x = CURRENT_X
+            prev_y = CURRENT_Y
+            prev_z = CURRENT_Z
+
             # Memorizes the current position for calculating the related movements and the withdrawal plan
             if command in MOTION_COMMANDS:
                 if "X" in c.Parameters:
@@ -575,6 +581,61 @@ def parse(pathobj):
 
             # prepend a line number and append a newline
             if len(outstring) >= 1:
+                ##### START FULL-CIRCLE G02/G03 FIX #####
+                # Added by MSK on 2026-05-26 per ChatGPT suggestion.
+                # GRBL workaround:
+                # GRBL can fail on full-circle G2/G3 arcs where the
+                # start and end positions are exactly identical.
+                # Slightly perturb the endpoint to avoid the issue.
+
+                if command in ("G2", "G02", "G3", "G03"):
+
+                    if "X" in c.Parameters and "Y" in c.Parameters:
+
+                        end_x = float(
+                            Units.Quantity(
+                                c.Parameters["X"],
+                                FreeCAD.Units.Length
+                            ).getValueAs(UNIT_FORMAT)
+                        )
+
+                        end_y = float(
+                            Units.Quantity(
+                                c.Parameters["Y"],
+                                FreeCAD.Units.Length
+                            ).getValueAs(UNIT_FORMAT)
+                        )
+
+                        current_x = float(prev_x.getValueAs(UNIT_FORMAT))
+                        current_y = float(prev_y.getValueAs(UNIT_FORMAT))
+
+                        # Detect full-circle arc
+                        tol = 1e-9
+
+                        if abs(end_x - current_x) < tol and abs(end_y - current_y) < tol:
+
+                            # Perturb endpoint slightly in X and Y
+                            perturb = 0.001 if UNIT_FORMAT == "mm" else 0.0001
+                            end_x -= perturb
+                            end_y -= perturb
+
+                            # Rewrite X word in outstring
+                            for i, word in enumerate(outstring):
+                                if word.startswith("X"):
+                                    outstring[i] = "X" + format(end_x, precision_string)
+                                    break
+
+                            # Rewrite Y word in outstring
+                            for i, word in enumerate(outstring):
+                                if word.startswith("Y"):
+                                    outstring[i] = "Y" + format(end_y, precision_string)
+                                    break
+
+                            out += linenumber() + "(End point perturbed slightly by grbl_msk.py)\n"
+                            out += linenumber() + "(to avoid 'full-circle' G02/G03 bug)\n"
+
+                ##### END FULL-CIRCLE G02/G03 FIX #####
+
                 out += linenumber() + format_outstring(outstring) + "\n"
 
             # Check for comments containing machine-specific commands to pass literally to the controller
